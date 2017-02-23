@@ -7,4 +7,4 @@ Desenvolvidos por:
 
 -Marcos Arruda	
 -Lucas Nascimento Cabral
-- Fabiano Laureano
+-Fabiano Laureano
