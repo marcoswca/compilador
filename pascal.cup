@@ -42,13 +42,13 @@ parser code {:
     
     public void sem_error(String lexeme, String message) {
 		errors ++;
-		System.err.println("Error in line "+ Main.pascalLexer.current_line() + " : Erro semantico :-(");
+		System.err.println("Error in line "+ Main.pascalLexer.current_line() + " : Semantic error");
       	System.err.println("==> " + message + ": "+ lexeme + "\n");
   	}
   	
   	public void sem_error(String message) {
 		errors ++;
-		System.err.println("Error "+ Main.pascalLexer.current_lexeme() + " : Erro semantico :-(");
+		System.err.println("Error "+ Main.pascalLexer.current_lexeme() + " : Semantic error");
       	System.err.println("==> " + message +"\n");
   	}
   	
@@ -136,13 +136,13 @@ init with {:
    
 /* Terminals (tokens returned by the scanner).  */
    
-terminal  ARRAY, BEGIN, CONST;
+terminal  ARRAY, BEGIN, CASE, CONST;
 terminal  String AND, NOT, OR, MINUS, STAR, PLUS;
 terminal  String DIV, MOD, SLASH;
-terminal  DO, DOWNTO, END, FILE, FOR, FORWARD, FUNCTION, GOTO;
+terminal  DO, DOWNTO, ELSE, END, FILE, FOR, FORWARD, FUNCTION, GOTO, IF;
 terminal  IMPLEMENTATION, IN, INTERFACE, LABEL, NIL;
-terminal  OF, PACKED, PROCEDURE, PROGRAM, RECORD, SET, EXTERNAL;
-terminal  STRING, TO, TYPE, UNIT, UNTIL, USES, VAR, WITH, XOR;
+terminal  OF, PACKED, PROCEDURE, PROGRAM, RECORD, REPEAT, SET, EXTERNAL;
+terminal  STRING, THEN, TO, TYPE, UNIT, UNTIL, USES, VAR, WHILE, WITH, XOR;
 terminal  SEMICOLON, DOT;
 terminal  String IDENTIFIER, CHARACTER_STRING;
 terminal  ASSIGNMENT;
@@ -158,7 +158,7 @@ terminal  INTEGER, BOOLEAN, REAL, CHAR, TRUE, FALSE;
 /* Non terminals used in the grammar section. */
    
 non terminal program, program_heading;
-non terminal List<String> identifier_list, for_designator;
+non terminal List<String> identifier_list, for_designator, while_designator;
 non terminal block, module;
 non terminal label_declaration_part, label_list, label, constant_definition_part;
 non terminal constant_list, constant_definition;
@@ -169,7 +169,7 @@ non terminal Tipo type_denoter, result_type;
 non terminal new_type, new_ordinal_type, enumerated_type, subrange_type, new_structured_type;
 non terminal structured_type, array_type, index_list, index_type, ordinal_type, component_type;
 non terminal record_type, record_section_list, record_section, variant_part, variant_selector;
-non terminal variant_list, variant, tag_field, tag_type;
+non terminal variant_list, variant, case_constant_list, case_constant, tag_field, tag_type;
 non terminal set_type, base_type, file_type, new_pointer_type, domain_type, variable_declaration_part;
 non terminal variable_declaration_list, variable_declaration, procedure_and_function_declaration_part;
 non terminal proc_or_func_declaration_list, proc_or_func_declaration, procedure_declaration;
@@ -180,8 +180,8 @@ non terminal procedural_parameter_specification, functional_parameter_specificat
 non terminal String procedure_identification, function_identification, direction;
 non terminal procedure_block, function_declaration, function_heading;
 non terminal function_block, statement_part, compound_statement, statement_sequence, statement, open_statement;
-non terminal closed_statement, non_labeled_closed_statement, non_labeled_open_statement;
-non terminal open_for_statement, closed_for_statement;
+non terminal closed_statement, non_labeled_closed_statement, non_labeled_open_statement, repeat_statement;
+non terminal open_while_statement, closed_while_statement, open_for_statement, closed_for_statement;
 non terminal open_with_statement, closed_with_statement, open_if_statement, closed_if_statement;
 non terminal Tipo assignment_statement;
 non terminal Exp variable_access; 
@@ -189,7 +189,7 @@ non terminal indexed_variable, index_expression_list, index_expression;
 non terminal field_designator, procedure_statement;
 non terminal List<Exp> params, actual_parameter_list;
 non terminal Exp actual_parameter;
-non terminal goto_statement;
+non terminal goto_statement, case_statement, case_index, case_list_element_list, case_list_element;
 non terminal Exp control_variable, initial_value, final_value, record_variable_list;
 non terminal Exp boolean_expression, expression, simple_expression, term, factor, exponentiation, primary;
 non terminal Exp unsigned_constant, unsigned_number, unsigned_integer, unsigned_real, function_designator;
@@ -217,20 +217,14 @@ non terminal semicolon, comma;
 /* ----------------------------Gramatica-------------------- */
 
    
-   program ::= program_heading semicolon block DOT {: parser.code.append("\t HALT \n\n"); :};
+   program ::= program_heading semicolon block DOT {:  :};
 
    program_heading ::= PROGRAM identifier:id 
 						{: 
-							parser.code.append("; Codigo assembly simples para "+id+".\n"); 
-							parser.code.append("; Os registradores A0...An sao argumentos de funcoes/procedimentos.\n");
-							parser.code.append("; O registrador V0 guarda retorno de funcoes.\n\n"); 
-							parser.code.append("\t LD SP , #stackStart\n"); 
-							parser.code.append("\t BR main \n"); 
+						
 						:}
    					 | PROGRAM identifier:id {: 
-							parser.code.append("// Assembly code to "+id+" \n\n"); 
-							parser.code.append("\t LD SP , #stackStart\n"); 
-							parser.code.append("\t BR main \n"); 
+							
 						:}
 					   LPAREN identifier_list RPAREN;
 
@@ -243,7 +237,6 @@ non terminal semicolon, comma;
 			  variable_declaration_part procedure_and_function_declaration_part
  			  {: 
 				 if(TabelaDeSimbolos.escopoCorrente.isRoot()) { 
-					parser.code.append("main: \n");
 				 } 
 			   :}
  			  statement_part;
@@ -359,9 +352,20 @@ non terminal semicolon, comma;
 
    record_section ::= identifier_list COLON type_denoter;
 
+   variant_part ::= CASE variant_selector OF variant_list semicolon | CASE variant_selector OF variant_list 
+                    | ;
+
    variant_selector ::= tag_field COLON tag_type | tag_type;
 
    variant_list ::= variant_list semicolon variant | variant;
+
+   variant ::= case_constant_list COLON LPAREN record_section_list RPAREN | 
+               case_constant_list COLON LPAREN record_section_list semicolon variant_part RPAREN | 
+               case_constant_list COLON LPAREN variant_part RPAREN;
+
+   case_constant_list ::= case_constant_list comma case_constant | case_constant;
+
+   case_constant ::= constant | constant DOTDOT constant;
 
    tag_field ::= identifier;
 
@@ -400,13 +404,12 @@ non terminal semicolon, comma;
 
    procedure_declaration ::= procedure_heading semicolon directive | 
                              procedure_heading semicolon procedure_block {:
-								parser.code.append("\t BR *0(SP) \n");
 								TabelaDeSimbolos.pop();
                              :} ;
 
-   procedure_heading ::= procedure_identification:pi {:TabelaDeSimbolos.push(); parser.code.append(pi+": \n");:}
+   procedure_heading ::= procedure_identification:pi {:TabelaDeSimbolos.push(); :}
    						| 
-   						procedure_identification:pi {: TabelaDeSimbolos.push(); parser.code.append(pi+": \n"); :} 
+   						procedure_identification:pi {: TabelaDeSimbolos.push(); :} 
 						formal_parameter_list:fpl
    						{: Simbolo s = TabelaDeSimbolos.get(pi.toLowerCase());
                             if(s != null) {
@@ -495,7 +498,6 @@ non terminal semicolon, comma;
                           function_identification semicolon function_block | 
                           function_heading semicolon function_block 
                            {:
-                              parser.code.append("\t BR *0(SP) \n"); 
                               TabelaDeSimbolos.pop();
                             :};
 
@@ -504,10 +506,9 @@ non terminal semicolon, comma;
                             	parser.sem_error(id, "duplicate name");
                             } else {
 								TabelaDeSimbolos.push();
-								parser.code.append(id+": \n");
                             } 
    						:}
-   						| function_identification:fi {:TabelaDeSimbolos.push(); parser.code.append(fi+": \n");:}
+   						| function_identification:fi {:TabelaDeSimbolos.push(); :}
 						  formal_parameter_list:fpl COLON result_type:rt {:
    							
    							if(fi != null) {
@@ -550,42 +551,81 @@ non terminal semicolon, comma;
    non_labeled_closed_statement ::= assignment_statement | procedure_statement
                                    | goto_statement
                                    | compound_statement
+ 								   | case_statement
+                                   | repeat_statement 
 										{: 	
 											labels.add(labels.size()+1);
-											parser.code.append("$L"+labels.size()+":\n");
 										:}
                                    | closed_with_statement
                                    | closed_if_statement
+                                   | closed_while_statement
                                    | closed_for_statement
                                    | ;
 
-   non_labeled_open_statement ::= open_with_statement | open_if_statement | open_for_statement;
+   non_labeled_open_statement ::= open_with_statement | open_if_statement | open_while_statement | 
+                               open_for_statement;
+
+   repeat_statement ::= REPEAT {:   
+									labels.add(labels.size()+1);
+									label = labels.size();
+						       :} 
+						statement_sequence UNTIL boolean_expression:be
+						{:
+						
+							label --;
+						:}
+						;
    
+   while_designator ::= WHILE boolean_expression:be 
+						{:
+							String lbl1 = "", lblFalse = "";
+							
+							labels.add(labels.size()+1);
+							lbl1 = "$L"+labels.size();
+							
+					
+							
+							labels.add(labels.size()+1);
+							lblFalse = "$L"+labels.size();
+							
+							
+							List<String> whileArgs = new ArrayList <String> ();
+							whileArgs.add(lbl1);
+							whileArgs.add(lblFalse);
+							
+							RESULT = whileArgs;
+						:};
+
+   open_while_statement ::= while_designator:wd DO open_statement
+							{:
+								
+							:}
+							;
+
+   closed_while_statement ::= while_designator:wd DO closed_statement
+							{:
+								
+							:};
    
    for_designator ::= FOR control_variable:cv ASSIGNMENT initial_value:iv direction:dir final_value:fv 
 					  {:
 						String lbl1 = "", lblFalse = "";
 						if(!cv.tipo.getVal().equals("error")) {
+						/* verifica o tipo em caso de erro de tipos retorna erro semantico */
 							if(!cv.tipo.getVal().equals(iv.tipo.getVal())) {
 								parser.sem_error(cv.tipo.getVal(), "The type of initial value must be ");
 							}
+							/* mesma coisa */
 							else if(!cv.tipo.getVal().equals(fv.tipo.getVal())) {
 								parser.sem_error(cv.tipo.getVal(), "The type of final value must be ");
 							}
 							else {
-								parser.code.append("\t ST "+cv.code+" , "+iv.code+"\n");
 								labels.add(labels.size()+1);
 								lbl1 = "$L"+labels.size();
-								parser.code.append(lbl1+":\n");
-								parser.code.append("\t LD R4 , "+fv.code+"\n");
-								parser.code.append("\t LD R3 , "+cv.code+"\n");
-								parser.code.append("\t SUB R0 , R3 , R4\n");
 								labels.add(labels.size()+1);
 								lblFalse = "$L"+labels.size();
-								if(dir != null && dir.toLowerCase().equals("to"))
-									parser.code.append("\t BGTZ R0 , "+lblFalse+"\n");
-								else if(dir != null && dir.toLowerCase().equals("downto"))
-									parser.code.append("\t BLTZ R0 , "+lblFalse+"\n");
+								if(dir != null && dir.toLowerCase().equals("to"));
+								else if(dir != null && dir.toLowerCase().equals("downto"));
 							}
 						}
 						List<String> forArgs = new ArrayList<String>();
@@ -598,45 +638,38 @@ non terminal semicolon, comma;
 
    open_for_statement ::= for_designator:fd DO open_statement
                           {:
-							parser.code.append("\t LD R3 , "+fd.get(0)+"\n");
 							if(fd.get(1) != null && fd.get(1).toLowerCase().equals("to")) {
-								parser.code.append("\t ADD R3 , R3 , #1\n");
 							}
 							else if(fd.get(1) != null && fd.get(1).toLowerCase().equals("downto")) {
-								parser.code.append("\t SUB R3 , R3 , #1\n");
 							}
-                          	parser.code.append("\t ST "+fd.get(0)+" , R3\n");
-                          	parser.code.append("\t BR "+fd.get(2)+"\n");
-                          	parser.code.append(fd.get(3)+":\n");
+                        
                           	
                           :};
                                                               
 
    closed_for_statement ::= for_designator:fd DO closed_statement 
 							{:
-								parser.code.append("\t LD R3 , "+fd.get(0)+"\n");
 							    if(fd.get(1) != null && fd.get(1).toLowerCase().equals("to")) {
-									parser.code.append("\t ADD R3 , R3 , #1\n");
 								}
 								else if(fd.get(1) != null && fd.get(1).toLowerCase().equals("downto")) {
-									parser.code.append("\t SUB R3 , R3 , #1\n");
 								}
-								parser.code.append("\t ST "+fd.get(0)+" , R3\n");
-								parser.code.append("\t BR "+fd.get(2)+"\n");
-								parser.code.append(fd.get(3)+":\n");
+							
 							:};
 
    open_with_statement ::= WITH record_variable_list DO open_statement;
 
    closed_with_statement ::= WITH record_variable_list DO closed_statement;
 
-  
+   open_if_statement ::= IF boolean_expression THEN statement 
+                    | IF boolean_expression THEN closed_statement ELSE open_statement;
+
+   closed_if_statement ::= IF boolean_expression THEN closed_statement ELSE closed_statement;
    
    assignment_statement ::= variable_access:tva ASSIGNMENT expression:texp
    						{: 
    							if( tva.tipo instanceof TipoFuncao ) {
 								if(TabelaDeSimbolos.escopoCorrente.isRoot()) {
-									parser.sem_error(tva.code, "retorno fora do escopo da funcao ");
+									parser.sem_error(tva.code, "ops o retorno estah fora do escopo da funcao ");
 									RESULT = Tipo.getTipo(Tipo.ERRO);
 								}
 								else {
@@ -645,14 +678,13 @@ non terminal semicolon, comma;
 								    if(! rt.getVal().equals(texp.tipo.getVal())) {
 									 if(! rt.getVal().equals("error") && ! rt.getVal().equals("error")) {
 										 if(! (rt.getVal().equals("real") && texp.tipo.getVal().equals("integer"))) {
-											 parser.sem_error(rt.getVal(), "cannot convert from "+ texp.tipo.getVal() + " to ");
+											 parser.sem_error(rt.getVal(), "impossivel converter do tipo "+ texp.tipo.getVal() + " para ");
 											 RESULT = Tipo.getTipo(Tipo.ERRO);
 										 }
 									 }
 									}
 									else {
 										tva.code = "V0";
-										parser.code.append("\t LD "+tva.code+" , "+texp.code +"\n");
 										RESULT = Tipo.getTipo(Tipo.TIPO_VOID);
 									}
 								}
@@ -660,17 +692,15 @@ non terminal semicolon, comma;
    							else if(! tva.tipo.getVal().equals(texp.tipo.getVal())) {
    								if(! texp.tipo.getVal().equals("error") && ! tva.tipo.getVal().equals("error")) {
    									if(! (tva.tipo.getVal().equals("real") && texp.tipo.getVal().equals("integer"))) {
-   										parser.sem_error(tva.tipo.getVal(), "cannot convert from "+ texp.tipo.getVal() + " to ");
+   										parser.sem_error(tva.tipo.getVal(), "impossivel converter do tipo "+ texp.tipo.getVal() + " para ");
    										RESULT = Tipo.getTipo(Tipo.ERRO);
    									}
    									else {
-										parser.code.append("\t ST "+tva.code+" , "+texp.code +"\n");
    										RESULT = Tipo.getTipo(Tipo.TIPO_VOID);
    									}
    								}
    						   }
    						   else {
-								parser.code.append("\t ST "+tva.code+" , "+texp.code +"\n");
    						        RESULT = Tipo.getTipo(Tipo.TIPO_VOID);
    						   }
    						:}
@@ -714,16 +744,11 @@ non terminal semicolon, comma;
    								else {
    									for(int i = 0; i < prs.size(); i++) {
    										if(! tf.getTipoParametros().get(i).getVal().equals(prs.get(i).tipo.getVal())) {
-   											parser.sem_error(id, "Tipos dos parametros passados sao imcompativeis com os parametros de");
+   											parser.sem_error(id, "Tipos dos parametros passados sao incompativeis com os parametros de");
    											
    										}
    										Reg argReg = new Reg("A"+i);
-   										parser.code.append("\t LD "+argReg.id+" , "+prs.get(i).code+"\n"); 
    									}
-   									parser.code.append("\t ADD SP , SP , #caller.recordSize\n"); 
-   									parser.code.append("\t ST 0(SP) , #here + 16\n"); 
-   									parser.code.append("\t BR "+id+"\n"); 
-   									parser.code.append("\t SUB SP , SP , #caller.recordSize\n");
    								}
    							 }
    							
@@ -741,10 +766,7 @@ non terminal semicolon, comma;
    									parser.sem_error(id, "expected " + tf.getTipoParametros().size() + " parameters in function");
    									
    								} else {
-									parser.code.append("\t ADD SP , SP , #caller.recordSize\n"); 
-   									parser.code.append("\t ST 0(SP) , #here + 16\n"); 
-   									parser.code.append("\t BR "+id+"\n"); 
-   									parser.code.append("\t SUB SP , SP , #caller.recordSize\n");
+									
    								}
    							 }
    							
@@ -775,6 +797,14 @@ non terminal semicolon, comma;
 
    goto_statement ::= GOTO label;
 
+   case_statement ::= CASE case_index OF case_list_element_list END
+                  | CASE case_index OF case_list_element_list SEMICOLON END;
+
+   case_index ::= expression;
+ 
+   case_list_element_list ::= case_list_element_list semicolon case_list_element | case_list_element;
+
+   case_list_element ::= case_constant_list COLON statement;
 
    control_variable ::= identifier:id {: 
    							Simbolo t = null;
@@ -824,14 +854,11 @@ non terminal semicolon, comma;
    						if(ad != null) {
    							if(ad.toLowerCase().equals("or")) {
    								if(!(se.tipo.getVal().equals("boolean") && te.tipo.getVal().equals("boolean"))) {
-   									parser.sem_error(se.tipo.getVal() + ", " + te.tipo.getVal(), "O operador OR eh undefined para os tipos ");
+   									parser.sem_error(se.tipo.getVal() + ", " + te.tipo.getVal(), "The operator OR is undefined for the argument types ");
    									RESULT = new Exp(Tipo.getTipo(Tipo.ERRO),"");
    								}
    								else {
-									if(! "R1".equals(se.code))
-										parser.code.append("\t LD R1 , "+se.code+"\n");
-									se.code = "R1";
-									parser.code.append("\t OR "+se.code+" , "+se.code+" , "+te.code+"\n");
+								
    									RESULT = new Exp(Tipo.getTipo(Tipo.BOOLEAN), se.code);
    								}
    							}
@@ -841,11 +868,9 @@ non terminal semicolon, comma;
 									
 									String op = assembOp(ad.toLowerCase());
 									if(se.isConstant) {
-										parser.code.append("\t "+op+" R1 , "+se.code+" , "+te.code+"\n");
 										se.code = "R1";
 									}
 									else {
-										parser.code.append("\t "+op+" "+se.code+" , "+se.code+" , "+te.code+"\n");
 									}
    									RESULT = new Exp(Tipo.maximo(se.tipo, te.tipo), se.code);
    								}
@@ -854,7 +879,7 @@ non terminal semicolon, comma;
    									RESULT = new Exp(Tipo.maximo(se.tipo, te.tipo), "?");
    								}
    								else {
-   									parser.sem_error(se.tipo.getVal() + ", " + te.tipo.getVal(), "O operador "+ad+" eh undefined para os tipos");
+   									parser.sem_error(se.tipo.getVal() + ", " + te.tipo.getVal(), "The operator "+ad+" is undefined for the argument types ");
    									RESULT = new Exp(Tipo.getTipo(Tipo.ERRO), "");
    								}
    							}
@@ -873,10 +898,6 @@ non terminal semicolon, comma;
    									RESULT = new Exp(Tipo.getTipo(Tipo.ERRO), "");
    								}
    								else {
-									if(! "R1".equals(se.code))
-										parser.code.append("\t LD R1 , "+se.code+"\n");
-									se.code = "R1";
-									parser.code.append("\t AND "+se.code+" , "+se.code+" , "+te.code+"\n");
    									RESULT = new Exp(Tipo.getTipo(Tipo.BOOLEAN), se.code);
    								}
    							}
@@ -885,11 +906,8 @@ non terminal semicolon, comma;
    								  (te.tipo.getVal().equals("integer") || te.tipo.getVal().equals("real"))) {
    									String op = assembOp(ad.toLowerCase());
 									if(se.isConstant) {
-										parser.code.append("\t "+op+" R1 , "+se.code+" , "+te.code+"\n");
-										se.code = "R1";
 									}
 									else {
-										parser.code.append("\t "+op+" "+se.code+" , "+se.code+" , "+te.code+"\n");
 									}
    									RESULT = new Exp(Tipo.maximo(se.tipo, te.tipo), se.code);
    								}
@@ -902,11 +920,8 @@ non terminal semicolon, comma;
    								if(se.tipo.getVal().equals("integer") && te.tipo.getVal().equals("integer")) {
 									String op = assembOp(ad.toLowerCase());
 									if(se.isConstant) {
-										parser.code.append("\t "+op+" R1 , "+se.code+" , "+te.code+"\n");
-										se.code = "R1";
 									}
 									else {
-										parser.code.append("\t "+op+" "+se.code+" , "+se.code+" , "+te.code+"\n");
 									}
    									RESULT = new Exp(Tipo.getTipo(Tipo.INTEGER), se.code);
    								}
@@ -955,10 +970,6 @@ non terminal semicolon, comma;
    											+" parameters in function");
 								RESULT = new Exp(Tipo.getTipo(Tipo.ERRO),"");
    							} else {
-								parser.code.append("\t ADD SP , SP , #caller.recordSize\n"); 
-   								parser.code.append("\t ST 0(SP) , #here + 16\n"); 
-   								parser.code.append("\t BR "+va.code+"\n"); 
-   								parser.code.append("\t SUB SP , SP , #caller.recordSize\n");
    								RESULT = new Exp(va.tipo,"V0");
    							}
    						} else {
@@ -966,17 +977,14 @@ non terminal semicolon, comma;
 									Reg arg = getArgReg(va.code);
 									if(arg != null) {
 										va.code = arg.id;
-										//Se a variable_access for um argumento, carregar em regs diferentes
-										parser.code.append("\t LD R"+va.code.charAt(1)+" , "+va.code +"\n"); 
+										//Se a for um argumento, carregar em diferentes registradores
 										RESULT =  new Exp(va.tipo, "R"+va.code.charAt(1));
 									}
 									else {
-										parser.code.append("\t LD R0 , "+va.code +"\n");
 										RESULT =  new Exp(va.tipo, "R0"); 
 									}
 							}
 							else {
-								parser.code.append("\t LD R0 , "+va.code +"\n");
 								RESULT =  new Exp(va.tipo, "R0"); 
 							}
 						}
@@ -986,7 +994,6 @@ non terminal semicolon, comma;
    			 | set_constructor
              | LPAREN expression:exp RPAREN {: 
 					if(getArgReg("temp") == null) {
-						parser.code.append("\t LD R2 , "+exp.code+"\n");
 						argRegs.add(new Reg("R2", "temp"));
 						exp.code = "R2";
 					}
@@ -1001,9 +1008,6 @@ non terminal semicolon, comma;
              		RESULT = new Exp(Tipo.getTipo(Tipo.ERRO),"");
              	}
              	else {
-					parser.code.append("\t LD R0 , "+pr.code+"\n");
-					parser.code.append("\t NOT R0\n");
-					pr.code = "R0";
              		RESULT = pr;
              	}
              :}
@@ -1040,17 +1044,13 @@ non terminal semicolon, comma;
    								else {
    									for(int i = 0; i < prs.size(); i++) {
    										if(! tf.getTipoParametros().get(i).getVal().equals(prs.get(i).tipo.getVal())) {
-   											parser.sem_error(id, "Tipos dos parametros passados sao imcompativeis com os parametros de");
+   											parser.sem_error(id, "Tipos dos parametros passados sao incompativeis com os parametros de");
    											RESULT = new Exp(Tipo.getTipo(Tipo.ERRO),"");
    										} else {
 											Reg argReg = argRegs.get(i);
-											parser.code.append("\t LD "+argReg.id+" , "+prs.get(i).code +"\n"); 
    										}
    									}
-   									parser.code.append("\t ADD SP , SP , #caller.recordSize\n"); 
-   									parser.code.append("\t ST 0(SP) , #here + 16\n"); 
-   									parser.code.append("\t BR "+id+"\n"); 
-   									parser.code.append("\t SUB SP , SP , #caller.recordSize\n");
+   								
    									RESULT = new Exp(tf.getTipoRetorno(), "V0");
    								}
    							}

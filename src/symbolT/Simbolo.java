@@ -1,4 +1,4 @@
-package symbTable;
+package symbolT;
 
 import tipo.Tipo;
 

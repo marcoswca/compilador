@@ -1,4 +1,4 @@
-# Pascal Compila
+# Compila 2016.2
 Compilador de Pascal.
 
 Ferramentas: Jflex e Cup.
